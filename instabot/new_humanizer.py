@@ -29,6 +29,79 @@ class Humanizer:
         self._adb_command(f"shell input swipe {x1} {y1} {x2} {y2} {duration}")        
         self._log(f"Natural swipe: {duration}ms")
         self.sleep(0.5, 1.2)
+
+    def mini_swipe_down(self):
+        """
+        Performs a short downward swipe in the center of the screen.
+        Used to minimize comment sections or hide keyboards.
+        """
+        # Get screen dimensions (assuming 1080x1920, adjust if your phone differs)
+        # Or better yet, use self.device.wm_size() to get them dynamically
+        center_x = 540  
+        start_y = 960  # Middle of screen
+        end_y = 1100   # Move down slightly (140 pixels)
+        
+        # We use a very fast duration for a 'flick' feel
+        duration = random.randint(100, 200) 
+        
+        self._log(f"Mini-swipe to minimize comments...")
+        self._adb_command(f"shell input swipe {center_x} {start_y} {center_x} {end_y} {duration}")
+        
+        # Small wait for the UI animation to finish
+        self.sleep(0.4, 0.8)
+    
+    def swipe_top_down_percentage(self, percent=15):
+        """
+        Swipes down 15% of the screen starting from near the top.
+        Good for refreshing or shifting the comment view slightly.
+        """
+        # 1. Get real screen size (e.g., 'Physical size: 1080x2400')
+        size_output = self._adb_command("shell wm size")
+        width, height = map(int, size_output.split(':')[-1].strip().split('x'))
+
+        # 2. Calculate coordinates
+        x = width // 2            # Middle of screen width-wise
+        start_y = int(height * 0.05)  # Start at 5% (just below the notch)
+        end_y = int(height * (0.05 + (percent / 100))) # End 15% further down
+        
+        duration = random.randint(300, 600)
+        
+        self._log(f"Percentage Swipe: {percent}% ({start_y} -> {end_y})")
+        self._adb_command(f"shell input swipe {x} {start_y} {x} {end_y} {duration}")
+        self.sleep(0.5, 1.0)
+    
+    def swipe_down_from_box(box_x, box_y, box_w, box_h, duration_ms=300):
+        # 1. Randomize Start Position (slightly off-center)
+        start_x = box_x + (box_w // 2) + random.randint(-10, 10)
+        start_y = box_y + (box_h // 4) + random.randint(-10, 10)
+        
+        # 2. Randomize End Position
+        end_x = start_x + random.randint(-5, 5) # Keep swipe relatively straight
+        end_y = box_y + (box_h * 3 // 4) + random.randint(-10, 10)
+        
+        # 3. Randomize Duration (between 400ms and 900ms)
+        # This range feels like a natural "swipe" rather than a slow drag
+        duration = random.randint(duration_ms, duration_ms + 100)
+
+
+        # Calculate the starting point (center-top of the box)
+        start_x = box_x + (box_w // 2)
+        start_y = box_y + (box_h // 4)
+        
+        # Calculate the end point (bottom of the box)
+        end_x = start_x
+        end_y = box_y + (box_h * 3 // 4)
+        
+        # Construct the ADB command
+        # Syntax: adb shell input swipe <x1> <y1> <x2> <y2> [duration]
+        command = f"adb shell input swipe {start_x} {start_y} {end_x} {end_y} {duration_ms}"
+        
+        # Execute in Termux
+        try:
+            subprocess.run(command, shell=True, check=True)
+            print(f"Swiped down from ({start_x}, {start_y}) to ({end_x}, {end_y})")
+        except subprocess.CalledProcessError as e:
+            print(f"Error executing ADB command: {e}")
     
     def swipe_random_feed(self):
         """A big, natural thumb swipe to move the feed."""

@@ -1,8 +1,252 @@
 import cv2
 import numpy as np
 import os
+import ollama
+import json_repair
 
+class OCR:
+    @staticmethod
+    def extract_comments_from_screen(screen):
+        img = screen
+        
+        # 2. THE FIX: CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        # This makes the faint Blue mentions (@username) pop out as dark text.
+        
+        # Convert to LAB color space (Luminance, A, B)
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # Apply CLAHE to the L (Lightness) channel
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        cl = clahe.apply(l)
+        
+        # Merge back and convert to BGR
+        limg = cv2.merge((cl, a, b))
+        final_img = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+        
+        # Optional: Slight sharpening to separate "you" from "Leon"
+        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+        final_img = cv2.filter2D(final_img, -1, kernel)
 
+        # ---------------------------------------------------------
+        # 2. THE MEMORY FIX: Encode directly to Bytes (No Disk I/O)
+        # ---------------------------------------------------------
+        # We "pretend" to save it as a JPG, but keep it in RAM variable 'buffer'
+        success, buffer = cv2.imencode('.jpg', final_img)
+        
+        if not success:
+            print("❌ Failed to encode image to bytes")
+            return []
+
+        image_bytes = buffer.tobytes()
+
+        # 3. THE PROMPT (Specific instructions for @mentions)
+        prompt = """
+        Extract ALL comments from this Instagram screenshot.
+        
+        CRITICAL RULES FOR ACCURACY:
+        1. **Detect Mentions:** If a comment starts with or contains a username (often blue), KEEP IT (e.g., "@vinny thanks").
+        2. **Fix Merged Text:** If a name is stuck to a word (e.g., "thankyouLeon"), split it ("thank you Leon").
+        3. **Capture Replies:** Do not ignore the "@username" at the start of a reply.
+        
+        Structure:
+        {
+          "comments": [
+            { "username": "exact_handle", "time" : "2w 1d whatever", " "content": "@target_user text ❤️" }
+          ]
+        }
+        """
+
+        try:
+            response = ollama.chat(
+                model='qwen2.5vl:latest', 
+                format='json',
+                options={
+                    'temperature': 0,
+                    'num_ctx': 8192,
+                    'repeat_penalty': 1.1 
+                },
+                messages=[{
+                    'role': 'user',
+                    'content': prompt,
+                    'images': [image_bytes]
+                }]
+            )
+
+            data = json_repair.loads(response['message']['content'])
+            if isinstance(data, dict):
+                return data.get('comments', [])
+            elif isinstance(data, list):
+                return data
+            return []
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            return []
+
+    @staticmethod
+    def extract_comments_by_filepath(image_path):
+        print(f"👁️ Qwen 7B (Contrast Boost) is reading {image_path}...")
+        
+        if not os.path.exists(image_path):
+            return []
+
+        # 1. LOAD IMAGE
+        img = cv2.imread(image_path)
+        
+        # 2. THE FIX: CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        # This makes the faint Blue mentions (@username) pop out as dark text.
+        
+        # Convert to LAB color space (Luminance, A, B)
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # Apply CLAHE to the L (Lightness) channel
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        cl = clahe.apply(l)
+        
+        # Merge back and convert to BGR
+        limg = cv2.merge((cl, a, b))
+        final_img = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+        
+        # Optional: Slight sharpening to separate "you" from "Leon"
+        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+        final_img = cv2.filter2D(final_img, -1, kernel)
+
+        # Save for AI
+        temp_path = "temp_boosted.jpg"
+        cv2.imwrite(temp_path, final_img)
+
+        # 3. THE PROMPT (Specific instructions for @mentions)
+        prompt = """
+        Extract ALL comments from this Instagram screenshot.
+        
+        CRITICAL RULES FOR ACCURACY:
+        1. **Detect Mentions:** If a comment starts with or contains a username (often blue), KEEP IT (e.g., "@vinny thanks").
+        2. **Fix Merged Text:** If a name is stuck to a word (e.g., "thankyouLeon"), split it ("thank you Leon").
+        3. **Capture Replies:** Do not ignore the "@username" at the start of a reply.
+        
+        Structure:
+        {
+          "comments": [
+            { "username": "exact_handle", "time" : "2w 1d whatever", " "content": "@target_user text ❤️" }
+          ]
+        }
+        """
+
+        try:
+            response = ollama.chat(
+                model='qwen2.5vl:latest', 
+                format='json',
+                options={
+                    'temperature': 0,
+                    'num_ctx': 8192,
+                    'repeat_penalty': 1.1 
+                },
+                messages=[{
+                    'role': 'user',
+                    'content': prompt,
+                    'images': [temp_path]
+                }]
+            )
+
+            data = json_repair.loads(response['message']['content'])
+            if isinstance(data, dict):
+                return data.get('comments', [])
+            elif isinstance(data, list):
+                return data
+            return []
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            return []
+    @staticmethod
+    def extract_chat_from_screen(screen):
+        img = screen
+        
+        # 2. THE FIX: CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        # This makes the faint Blue mentions (@username) pop out as dark text.
+        
+        # Convert to LAB color space (Luminance, A, B)
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # Apply CLAHE to the L (Lightness) channel
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        cl = clahe.apply(l)
+        
+        # Merge back and convert to BGR
+        limg = cv2.merge((cl, a, b))
+        final_img = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+        
+        # Optional: Slight sharpening to separate "you" from "Leon"
+        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+        final_img = cv2.filter2D(final_img, -1, kernel)
+
+        # ---------------------------------------------------------
+        # 2. THE MEMORY FIX: Encode directly to Bytes (No Disk I/O)
+        # ---------------------------------------------------------
+        # We "pretend" to save it as a JPG, but keep it in RAM variable 'buffer'
+        success, buffer = cv2.imencode('.jpg', final_img)
+        
+        if not success:
+            print("❌ Failed to encode image to bytes")
+            return []
+
+        image_bytes = buffer.tobytes()
+
+        # 3. THE PROMPT (Specific instructions for @mentions)
+        prompt = """
+        Extract the full conversation from this Instagram DM screenshot.
+
+        CRITICAL RULES FOR CHAT ACCURACY:
+        1. **Maintain Sequence:** Extract messages strictly from TOP to BOTTOM as they appear.
+        2. **Identify Participants:** - Identify the "Participant" (the person you are chatting with, usually named at the top).
+        - Distinguish between "Sent" (right side) and "Received" (left side) messages.
+        3. **Capture Timestamps:** Look for small gray text between message blocks (e.g., "Wed 10:45 AM" or "Seen").
+        4. **Handle Mentions/Shares:** If a post or profile was shared, note it as [Shared Content].
+
+        Structure:
+        {
+        "participant_name": "exact_name_at_top",
+        "messages": [
+            { 
+            "sender": "Them" or "Me", 
+            "time" : "timestamp if visible, else null", 
+            "content": "message text",
+            "status": "seen/delivered/null"
+            }
+        ]
+        }
+        """
+
+        try:
+            response = ollama.chat(
+                model='qwen2.5vl:latest', 
+                format='json',
+                options={
+                    'temperature': 0,
+                    'num_ctx': 8192,
+                    'repeat_penalty': 1.1 
+                },
+                messages=[{
+                    'role': 'user',
+                    'content': prompt,
+                    'images': [image_bytes]
+                }]
+            )
+
+            data = json_repair.loads(response['message']['content'])
+            if isinstance(data, dict):
+                return data.get('comments', [])
+            elif isinstance(data, list):
+                return data
+            return []
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            return []
+        
 class Locator:
     @staticmethod
     def find_btn(
@@ -59,8 +303,7 @@ class Locator:
             # --- MODE B: STANDARD GRAYSCALE MATCHING ---
             img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)
             template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
-            if template is None:
-                raise FileNotFoundError(f"Template not found: {template_path}")
+            if template is None: raise FileNotFoundError(f"Template not found: {template_path}")
             
             res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
             w, h = template.shape[::-1]
@@ -143,6 +386,22 @@ class Locator:
         ]
 
         return Locator.find_btn_by_templates(screen, templates, "main")
+    
+    @staticmethod
+    def find_comment_btn_on_homefeed(screen):
+        templates = [
+            ("btn-comment.png", 0.9)
+        ]
+
+        return Locator.find_btn_by_templates(screen, templates, "home")
+    
+    @staticmethod
+    def find_comment_header(screen):
+        templates = [
+            ("comment-header.png", 0.95)
+        ]
+
+        return Locator.find_btn_by_templates(screen, templates, "home", "top")
 
     @staticmethod
     def find_btn_by_templates(screen, templates, directory, screenpart=None):        
