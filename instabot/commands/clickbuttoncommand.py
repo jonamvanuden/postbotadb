@@ -10,18 +10,23 @@ class ClickButtonCommand:
     def execute(self, ctx):
         ctx.snap()
 
-        match self.btn_type:
-            case "main_inbox": box = Locator.find_inbox_btn(ctx.screen)
-            case "main_reel": box = Locator.find_reel_btn(ctx.screen)
-            case "main_profile": box = Locator.find_profile_btn(ctx.screen, "thelifeofaime")
-            case "main_home" : box = Locator.find_home_btn(ctx.screen)
-            case "home_comment" : box = Locator.find_comment_btn_on_homefeed(ctx.screen)
-            case _: raise ValueError(f"Unknown button: {self.btn_type}")           
+
+        try:
+
+            match self.btn_type:
+                case "main_inbox": box = Locator.find_inbox_btn(ctx.screen)
+                case "main_reel": box = Locator.find_reel_btn(ctx.screen)
+                case "main_profile": box = Locator.find_profile_btn(ctx.screen, "thelifeofaime")
+                case "main_home" : box = Locator.find_home_btn(ctx.screen)
+                case "home_comment" : box = Locator.find_comment_btn_on_homefeed(ctx.screen)
+                case "back" : box = Locator.find_btn_back(ctx.screen)
+                case _: raise ValueError(f"Unknown button: {self.btn_type}")           
 
 
-        if box:
-            ctx.human.tap_within_box(box)
-            return True
-        
-        print("ClickInboxCommand failed")
+            if box:
+                ctx.human.tap_within_box(box)
+                return True
+        except: 
+            print("ClickInboxCommand failed")
+            raise
         return False

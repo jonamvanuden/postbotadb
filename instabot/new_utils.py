@@ -160,6 +160,7 @@ class OCR:
         except Exception as e:
             print(f"❌ Error: {e}")
             return []
+            
     @staticmethod
     def extract_chat_from_screen(screen):
         img = screen
@@ -197,28 +198,43 @@ class OCR:
 
         # 3. THE PROMPT (Specific instructions for @mentions)
         prompt = """
-        Extract the full conversation from this Instagram DM screenshot.
+        You are a specialized OCR engine for Instagram CHAT SCREENS only.
 
-        CRITICAL RULES FOR CHAT ACCURACY:
-        1. **Maintain Sequence:** Extract messages strictly from TOP to BOTTOM as they appear.
-        2. **Identify Participants:** - Identify the "Participant" (the person you are chatting with, usually named at the top).
-        - Distinguish between "Sent" (right side) and "Received" (left side) messages.
-        3. **Capture Timestamps:** Look for small gray text between message blocks (e.g., "Wed 10:45 AM" or "Seen").
-        4. **Handle Mentions/Shares:** If a post or profile was shared, note it as [Shared Content].
+        CRITICAL VALIDATION:
+        - If the image contains a list of multiple different people/profiles (Inbox view), RETURN AN EMPTY LIST.
+        - DO NOT invent messages. If it's not in a bubble, it doesn't exist.
 
-        Structure:
+        STEP 1: IDENTIFY THE HEADER
+        - Look at the VERY TOP of the screen for the current contact name. To the left are a white arrow and a 
+          photo in the cirle. To the right are a phone and camera icon. Take the name there and use it as [HANDLE]
+
+        STEP 2: SPATIAL BUBBLE RULES
+        - RIGHT SIDE bubbles (Purple/Gradient): Set "sender": "Me".
+        - LEFT SIDE bubbles (Gray/Black): Set "sender": "[HANDLE]".
+        - IGNORE the small profile icons next to bubbles; only look at bubble position.
+        - You MUST extract messages in the exact order they appear from TOP to BOTTOM.
+        - Even if a sender speaks twice, if there is a message from someone else in between them vertically, you must preserve that order.
+        - Vertical position (Y-coordinate) is the ONLY way to determine message order. 
+        - DO NOT group messages by sender.
+
+        STEP 3: NOISE REMOVAL
+        - DO NOT extract: "Tap and hold to react", "Active now", "Seen", "Sent".
+        - ONLY extract the text INSIDE the bubbles and timestamps as [TIMESTAMPS] when visible.
+
+        OUTPUT JSON FORMAT:
         {
-        "participant_name": "exact_name_at_top",
-        "messages": [
+          "participant": { "handle": "[HANDLE]" },
+          "messages": [
             { 
-            "sender": "Them" or "Me", 
-            "time" : "timestamp if visible, else null", 
-            "content": "message text",
-            "status": "seen/delivered/null"
+                "sender": "[HANDLE or Me]", 
+                "content": "exact text", 
+                "timestamp": "[TIMESTAMPS]", 
+                "type": "text" 
             }
-        ]
+          ]
         }
         """
+
 
         try:
             response = ollama.chat(
@@ -238,7 +254,7 @@ class OCR:
 
             data = json_repair.loads(response['message']['content'])
             if isinstance(data, dict):
-                return data.get('comments', [])
+                return data.get('messages', [])
             elif isinstance(data, list):
                 return data
             return []
@@ -322,6 +338,7 @@ class Locator:
     @staticmethod
     def find_all_btns(template_path, screen_image, threshold=0.7):
         """Returns a list of all found (x, y, w, h) for a template."""
+        print(f"trying to open file: {template_path}")
         template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
         img_gray = cv2.cvtColor(screen_image, cv2.COLOR_BGR2GRAY)
         
@@ -337,6 +354,52 @@ class Locator:
         
         # Sort by Y coordinate (top to bottom)
         return sorted(found, key=lambda x: x[1])
+
+    @staticmethod
+    def find_unread_conversations(template_path, screen_image, threshold=0.9):
+        """
+        Specifically finds unread message rows by looking for the camera icon 
+        AND verifying the purple/blue unread dot exists via HSV color masking.
+        """
+        # 1. Standard Template Match (Grayscale) to find the Camera/Dot area
+        template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+        img_gray = cv2.cvtColor(screen_image, cv2.COLOR_BGR2GRAY)
+        w, h = template.shape[::-1]
+        
+        res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
+        locs = np.where(res >= threshold)
+        
+        candidates = []
+        for pt in zip(*locs[::-1]):
+            # Deduplicate matches that are too close (within 10px)
+            if not any(abs(pt[0] - f[0]) < 10 and abs(pt[1] - f[1]) < 10 for f in candidates):
+                candidates.append((pt[0], pt[1], w, h))
+
+        # 2. Color Verification Loop
+        unread_btns = []
+        for (x, y, w, h) in candidates:
+            # Define the Region of Interest (ROI) - the area of the detected button
+            roi = screen_image[y:y+h, x:x+w]
+            
+            # Convert ROI to HSV color space
+            hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            
+            # Instagram's unread blue/purple dot in HSV
+            # Adjust these if your screen brightness/blue-light filter is on
+            lower_purple = np.array([105, 70, 70])
+            upper_purple = np.array([135, 255, 255])
+            
+            mask = cv2.inRange(hsv_roi, lower_purple, upper_purple)
+            purple_count = cv2.countNonZero(mask)
+            
+            # LOGGING: Helps you debug if it's missing real ones
+            # print(f"Candidate at {x},{y} has {purple_count} purple pixels")
+
+            if purple_count > 8:  # Requires a cluster of purple pixels to be "unread"
+                unread_btns.append((x, y, w, h))
+                
+        # Sort top to bottom
+        return sorted(unread_btns, key=lambda b: b[1])
     
     @staticmethod
     def find_inbox_btn(screen):
@@ -349,13 +412,29 @@ class Locator:
         ]
 
         return Locator.find_btn_by_templates(screen, templates, "main", "bottom")
+    
+    @staticmethod
+    def find_btn_send(screen):
+        templates = [
+            ("btn-inbox-send.png", 0.9)
+        ] 
+        return Locator.find_btn_by_templates(screen, templates, "inbox")
+    
+    @staticmethod
+    def find_btn_back(screen):
+        templates = [
+            ("btn-back-transparent.png", 0.9),
+            ("btn-back.png", 0.9)
+        ]
+        return Locator.find_btn_by_templates(screen, templates, "main")
 
     @staticmethod            
     def find_profile_btn(screen, username):
         match username:
             case "thelifeofaime":
                 templates = [
-                    ("btn-profile-aime.png", 0.95)                
+                    ("btn-profile-aime.png", 0.90),
+                    ("btn-profile-aime-selected.png", 0.90)                
                 ]
             case "other":
                 templates = [

@@ -24,6 +24,10 @@ def wake_and_unlock(pin):
     adb_command("shell input keyevent 66")
     time.sleep(2)
 
+    write("Opening Instagram...")
+    # This command searches for the launcher automatically
+    adb_command("shell monkey -p com.instagram.android -c android.intent.category.LAUNCHER 1")
+
 def open_instagram():
     write("Opening Instagram...")
     # This command searches for the launcher automatically

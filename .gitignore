@@ -1,0 +1,13 @@
+# --- Python/Environment ---
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+
+# --- Project Specifics ---
+# Ignore the large AI models (they belong on your 5090, not GitHub)
+models/
+*.bin
+*.onnx
+*.pth

@@ -5,6 +5,11 @@ from .watchcommand import WatchPostCommand
 from .likewithdoubletapcommand import LikeWithDoubleTapCommand
 from .commandstatus import CommandStatus
 from .swipedowncommand import SwipeDownCommand, SwipeDrownFromBoxCommand
+from .openconversationcommand import OpenConversationCommand
+from .findandopenunreadcommand import FindAndOpenUnreadCommand
+from .sendmessagecommand import SendMessageCommand
+from .scrollcommand import ScrollCommand,ScrollToBottomCommand
+from .systemcommands import OpenInstagramCommand, CloseInstagramCommand
 
 # This list defines what gets imported when you use "from commands import *"
 __all__ = [
@@ -15,5 +20,12 @@ __all__ = [
     'WatchPostCommand',
     'LikeWithDoubleTapCommand',
     'SwipeDownCommand',
-    'SwipeDrownFromBoxCommand'
+    'SwipeDrownFromBoxCommand',
+    'OpenConversationCommand',
+    'FindAndOpenUnreadCommand',
+    'SendMessageCommand',
+    'ScrollCommand',
+    'ScrollToBottomCommand',
+    'OpenInstagramCommand',
+    'CloseInstagramCommand'
 ]
